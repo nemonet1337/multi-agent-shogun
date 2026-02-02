@@ -57,6 +57,8 @@ echo ""
 echo "  このスクリプトは初回セットアップ用です。"
 echo "  依存関係の確認とディレクトリ構造の作成を行います。"
 echo ""
+echo "  インストール先: $SCRIPT_DIR"
+echo ""
 
 # ============================================================
 # STEP 1: OS チェック
@@ -100,12 +102,31 @@ else
 
     # Ubuntu/Debian系かチェック
     if command -v apt-get &> /dev/null; then
-        read -p "  tmux をインストールしますか? [Y/n]: " REPLY
+        if [ ! -t 0 ]; then
+            REPLY="Y"
+        else
+            read -p "  tmux をインストールしますか? [Y/n]: " REPLY
+        fi
         REPLY=${REPLY:-Y}
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             log_info "tmux をインストール中..."
-            sudo apt-get update -qq
-            sudo apt-get install -y tmux
+            if ! sudo -n apt-get update -qq 2>/dev/null; then
+                if ! sudo apt-get update -qq 2>/dev/null; then
+                    log_error "sudo の実行に失敗しました。ターミナルから直接実行してください"
+                    RESULTS+=("tmux: インストール失敗 (sudo失敗)")
+                    HAS_ERROR=true
+                fi
+            fi
+
+            if [ "$HAS_ERROR" != true ]; then
+                if ! sudo -n apt-get install -y tmux 2>/dev/null; then
+                    if ! sudo apt-get install -y tmux 2>/dev/null; then
+                        log_error "tmux のインストールに失敗しました"
+                        RESULTS+=("tmux: インストール失敗")
+                        HAS_ERROR=true
+                    fi
+                fi
+            fi
 
             if command -v tmux &> /dev/null; then
                 TMUX_VERSION=$(tmux -V | awk '{print $2}')
@@ -134,9 +155,41 @@ else
 fi
 
 # ============================================================
-# STEP 3: Node.js チェック
+# STEP 3: tmux マウススクロール設定
 # ============================================================
-log_step "STEP 3: Node.js チェック"
+log_step "STEP 3: tmux マウススクロール設定"
+
+TMUX_CONF="$HOME/.tmux.conf"
+TMUX_MOUSE_SETTING="set -g mouse on"
+
+if [ -f "$TMUX_CONF" ] && grep -qF "$TMUX_MOUSE_SETTING" "$TMUX_CONF" 2>/dev/null; then
+    log_info "tmux マウス設定は既に ~/.tmux.conf に存在します"
+else
+    log_info "~/.tmux.conf に '$TMUX_MOUSE_SETTING' を追加中..."
+    echo "" >> "$TMUX_CONF"
+    echo "# マウススクロール有効化 (added by first_setup.sh)" >> "$TMUX_CONF"
+    echo "$TMUX_MOUSE_SETTING" >> "$TMUX_CONF"
+    log_success "tmux マウス設定を追加しました"
+fi
+
+# tmux が起動中の場合は即反映
+if command -v tmux &> /dev/null && tmux list-sessions &> /dev/null; then
+    log_info "tmux が起動中のため、設定を即反映します..."
+    if tmux source-file "$TMUX_CONF" 2>/dev/null; then
+        log_success "tmux 設定を再読み込みしました"
+    else
+        log_warn "tmux 設定の再読み込みに失敗しました（手動で tmux source-file ~/.tmux.conf を実行してください）"
+    fi
+else
+    log_info "tmux は起動していないため、次回起動時に反映されます"
+fi
+
+RESULTS+=("tmux マウス設定: OK")
+
+# ============================================================
+# STEP 4: Node.js チェック
+# ============================================================
+log_step "STEP 4: Node.js チェック"
 
 if command -v node &> /dev/null; then
     NODE_VERSION=$(node -v)
@@ -153,21 +206,64 @@ if command -v node &> /dev/null; then
 else
     log_warn "Node.js がインストールされていません"
     echo ""
-    echo "  Node.js のインストール方法（推奨: nvm を使用）:"
-    echo ""
-    echo "  1. nvm をインストール:"
-    echo "     curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.0/install.sh | bash"
-    echo ""
-    echo "  2. ターミナルを再起動後:"
-    echo "     nvm install 20"
-    echo "     nvm use 20"
-    echo ""
-    echo "  または、直接インストール（Ubuntu）:"
-    echo "     curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -"
-    echo "     sudo apt-get install -y nodejs"
-    echo ""
-    RESULTS+=("Node.js: 未インストール")
-    HAS_ERROR=true
+
+    # nvm が既にインストール済みか確認
+    export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+    if [ -s "$NVM_DIR/nvm.sh" ]; then
+        log_info "nvm が既にインストール済みです。Node.js をセットアップ中..."
+        \. "$NVM_DIR/nvm.sh"
+    else
+        # nvm 自動インストール
+        if [ ! -t 0 ]; then
+            REPLY="Y"
+        else
+            read -p "  Node.js (nvm経由) をインストールしますか? [Y/n]: " REPLY
+        fi
+        REPLY=${REPLY:-Y}
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            log_info "nvm をインストール中..."
+            curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+        else
+            log_warn "Node.js のインストールをスキップしました"
+            echo ""
+            echo "  手動でインストールする場合:"
+            echo "    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash"
+            echo "    source ~/.bashrc"
+            echo "    nvm install 20"
+            echo ""
+            RESULTS+=("Node.js: 未インストール (スキップ)")
+            HAS_ERROR=true
+        fi
+    fi
+
+    # nvm が利用可能なら Node.js をインストール
+    if command -v nvm &> /dev/null; then
+        log_info "Node.js 20 をインストール中..."
+        nvm install 20 || true
+        nvm use 20 || true
+
+        if command -v node &> /dev/null; then
+            NODE_VERSION=$(node -v)
+            log_success "Node.js インストール完了 ($NODE_VERSION)"
+            RESULTS+=("Node.js: インストール完了 ($NODE_VERSION)")
+        else
+            log_error "Node.js のインストールに失敗しました"
+            RESULTS+=("Node.js: インストール失敗")
+            HAS_ERROR=true
+        fi
+    elif [ "$HAS_ERROR" != true ]; then
+        log_error "nvm のインストールに失敗しました"
+        echo ""
+        echo "  手動でインストールしてください:"
+        echo "    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash"
+        echo "    source ~/.bashrc"
+        echo "    nvm install 20"
+        echo ""
+        RESULTS+=("Node.js: 未インストール (nvm失敗)")
+        HAS_ERROR=true
+    fi
 fi
 
 # npm チェック
@@ -181,9 +277,9 @@ else
 fi
 
 # ============================================================
-# STEP 4A: Claude Code CLI チェック
+# STEP 5: Claude Code CLI チェック
 # ============================================================
-log_step "STEP 4A: Claude Code CLI チェック"
+log_step "STEP 5: Claude Code CLI チェック"
 
 if command -v claude &> /dev/null; then
     # バージョン取得を試みる
@@ -199,7 +295,11 @@ else
         echo "  インストールコマンド:"
         echo "     npm install -g @anthropic-ai/claude-code"
         echo ""
-        read -p "  今すぐインストールしますか? [Y/n]: " REPLY
+        if [ ! -t 0 ]; then
+            REPLY="Y"
+        else
+            read -p "  今すぐインストールしますか? [Y/n]: " REPLY
+        fi
         REPLY=${REPLY:-Y}
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             log_info "Claude Code CLI をインストール中..."
@@ -226,9 +326,9 @@ else
 fi
 
 # ============================================================
-# STEP 4B: Codex CLI チェック
+# STEP 5B: Codex CLI チェック
 # ============================================================
-log_step "STEP 4B: Codex CLI チェック"
+log_step "STEP 5B: Codex CLI チェック"
 
 if command -v codex &> /dev/null; then
     # バージョン取得を試みる
@@ -244,7 +344,11 @@ else
         echo "  インストールコマンド:"
         echo "     npm install -g @openai/codex"
         echo ""
-        read -p "  今すぐインストールしますか? [Y/n]: " REPLY
+        if [ ! -t 0 ]; then
+            REPLY="Y"
+        else
+            read -p "  今すぐインストールしますか? [Y/n]: " REPLY
+        fi
         REPLY=${REPLY:-Y}
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             log_info "Codex CLI をインストール中..."
@@ -256,17 +360,14 @@ else
             else
                 log_error "インストールに失敗しました。パスを確認してください"
                 RESULTS+=("Codex CLI: インストール失敗")
-                HAS_ERROR=true
             fi
         else
             log_warn "インストールをスキップしました"
             RESULTS+=("Codex CLI: 未インストール (スキップ)")
-            HAS_ERROR=true
         fi
     else
         echo "  npm がインストールされていないため、先に Node.js をインストールしてください"
         RESULTS+=("Codex CLI: 未インストール (npm必要)")
-        HAS_ERROR=true
     fi
 fi
 
@@ -276,9 +377,9 @@ if ! command -v claude &> /dev/null && ! command -v codex &> /dev/null; then
 fi
 
 # ============================================================
-# STEP 5: ディレクトリ構造作成
+# STEP 6: ディレクトリ構造作成
 # ============================================================
-log_step "STEP 5: ディレクトリ構造作成"
+log_step "STEP 6: ディレクトリ構造作成"
 
 # 必要なディレクトリ一覧
 DIRECTORIES=(
@@ -290,6 +391,7 @@ DIRECTORIES=(
     "logs"
     "demo_output"
     "skills"
+    "memory"
 )
 
 CREATED_COUNT=0
@@ -299,9 +401,9 @@ for dir in "${DIRECTORIES[@]}"; do
     if [ ! -d "$SCRIPT_DIR/$dir" ]; then
         mkdir -p "$SCRIPT_DIR/$dir"
         log_info "作成: $dir/"
-        ((CREATED_COUNT++))
+        CREATED_COUNT=$((CREATED_COUNT + 1))
     else
-        ((EXISTED_COUNT++))
+        EXISTED_COUNT=$((EXISTED_COUNT + 1))
     fi
 done
 
@@ -315,14 +417,14 @@ fi
 RESULTS+=("ディレクトリ構造: OK (作成:$CREATED_COUNT, 既存:$EXISTED_COUNT)")
 
 # ============================================================
-# STEP 6: 設定ファイル初期化
+# STEP 7: 設定ファイル初期化
 # ============================================================
-log_step "STEP 6: 設定ファイル確認"
+log_step "STEP 7: 設定ファイル確認"
 
 # config/settings.yaml
 if [ ! -f "$SCRIPT_DIR/config/settings.yaml" ]; then
     log_info "config/settings.yaml を作成中..."
-    cat > "$SCRIPT_DIR/config/settings.yaml" << 'EOF'
+    cat > "$SCRIPT_DIR/config/settings.yaml" << EOF
 # multi-agent-shogun 設定ファイル
 
 # 言語設定
@@ -331,18 +433,23 @@ if [ ! -f "$SCRIPT_DIR/config/settings.yaml" ]; then
 # その他の言語コード（es, zh, ko, fr, de 等）も対応
 language: ja
 
+# シェル設定
+# bash: bash用プロンプト（デフォルト）
+# zsh: zsh用プロンプト
+shell: bash
+
 # スキル設定
 skill:
-  # スキル保存先（生成されたスキルはここに保存）
-  save_path: "~/.claude/skills/shogun-generated/"
+  # スキル保存先（スキル名に shogun- プレフィックスを付けて保存）
+  save_path: "~/.claude/skills/"
 
   # ローカルスキル保存先（このプロジェクト専用）
-  local_path: "~/multi-agent-shogun/skills/"
+  local_path: "$SCRIPT_DIR/skills/"
 
 # ログ設定
 logging:
   level: info  # debug | info | warn | error
-  path: "~/multi-agent-shogun/logs/"
+  path: "$SCRIPT_DIR/logs/"
 EOF
     log_success "settings.yaml を作成しました"
 else
@@ -367,12 +474,33 @@ else
     log_info "config/projects.yaml は既に存在します"
 fi
 
+# memory/global_context.md（システム全体のコンテキスト）
+if [ ! -f "$SCRIPT_DIR/memory/global_context.md" ]; then
+    log_info "memory/global_context.md を作成中..."
+    cat > "$SCRIPT_DIR/memory/global_context.md" << 'EOF'
+# グローバルコンテキスト
+最終更新: (未設定)
+
+## システム方針
+- (殿の好み・方針をここに記載)
+
+## プロジェクト横断の決定事項
+- (複数プロジェクトに影響する決定をここに記載)
+
+## 注意事項
+- (全エージェントが知るべき注意点をここに記載)
+EOF
+    log_success "global_context.md を作成しました"
+else
+    log_info "memory/global_context.md は既に存在します"
+fi
+
 RESULTS+=("設定ファイル: OK")
 
 # ============================================================
-# STEP 7: 足軽用タスク・レポートファイル初期化
+# STEP 8: 足軽用タスク・レポートファイル初期化
 # ============================================================
-log_step "STEP 7: キューファイル初期化"
+log_step "STEP 8: キューファイル初期化"
 
 # 足軽用タスクファイル作成
 for i in {1..8}; do
@@ -410,9 +538,9 @@ log_info "足軽レポートファイル (1-8) を確認/作成しました"
 RESULTS+=("キューファイル: OK")
 
 # ============================================================
-# STEP 8: スクリプト実行権限付与
+# STEP 9: スクリプト実行権限付与
 # ============================================================
-log_step "STEP 8: 実行権限設定"
+log_step "STEP 9: 実行権限設定"
 
 SCRIPTS=(
     "setup.sh"
@@ -430,9 +558,9 @@ done
 RESULTS+=("実行権限: OK")
 
 # ============================================================
-# STEP 9: bashrc alias設定
+# STEP 10: bashrc alias設定
 # ============================================================
-log_step "STEP 9: alias設定"
+log_step "STEP 10: alias設定"
 
 # alias追加対象ファイル
 BASHRC_FILE="$HOME/.bashrc"
@@ -440,29 +568,47 @@ BASHRC_FILE="$HOME/.bashrc"
 # aliasが既に存在するかチェックし、なければ追加
 ALIAS_ADDED=false
 
-# css alias (出陣コマンド)
+# css alias (将軍ウィンドウの起動)
 if [ -f "$BASHRC_FILE" ]; then
+    EXPECTED_CSS="alias css='tmux attach-session -t shogun'"
     if ! grep -q "alias css=" "$BASHRC_FILE" 2>/dev/null; then
+        # alias が存在しない → 新規追加
         echo "" >> "$BASHRC_FILE"
         echo "# multi-agent-shogun aliases (added by first_setup.sh)" >> "$BASHRC_FILE"
-        echo "alias css='cd ~/multi-agent-shogun && ./shutsujin_departure.sh'" >> "$BASHRC_FILE"
-        log_info "alias css を追加しました（出陣コマンド）"
+        echo "$EXPECTED_CSS" >> "$BASHRC_FILE"
+        log_info "alias css を追加しました（将軍ウィンドウの起動）"
+        ALIAS_ADDED=true
+    elif ! grep -qF "$EXPECTED_CSS" "$BASHRC_FILE" 2>/dev/null; then
+        # alias は存在するがパスが異なる → 更新
+        if sed -i "s|alias css=.*|$EXPECTED_CSS|" "$BASHRC_FILE" 2>/dev/null; then
+            log_info "alias css を更新しました（パス変更検出）"
+        else
+            log_warn "alias css の更新に失敗しました"
+        fi
         ALIAS_ADDED=true
     else
-        log_info "alias css は既に存在します"
+        log_info "alias css は既に正しく設定されています"
     fi
 
-    # csm alias (ディレクトリ移動)
+    # csm alias (家老・足軽ウィンドウの起動)
+    EXPECTED_CSM="alias csm='tmux attach-session -t multiagent'"
     if ! grep -q "alias csm=" "$BASHRC_FILE" 2>/dev/null; then
         if [ "$ALIAS_ADDED" = false ]; then
             echo "" >> "$BASHRC_FILE"
             echo "# multi-agent-shogun aliases (added by first_setup.sh)" >> "$BASHRC_FILE"
         fi
-        echo "alias csm='cd ~/multi-agent-shogun'" >> "$BASHRC_FILE"
-        log_info "alias csm を追加しました（ディレクトリ移動）"
+        echo "$EXPECTED_CSM" >> "$BASHRC_FILE"
+        log_info "alias csm を追加しました（家老・足軽ウィンドウの起動）"
+        ALIAS_ADDED=true
+    elif ! grep -qF "$EXPECTED_CSM" "$BASHRC_FILE" 2>/dev/null; then
+        if sed -i "s|alias csm=.*|$EXPECTED_CSM|" "$BASHRC_FILE" 2>/dev/null; then
+            log_info "alias csm を更新しました（パス変更検出）"
+        else
+            log_warn "alias csm の更新に失敗しました"
+        fi
         ALIAS_ADDED=true
     else
-        log_info "alias csm は既に存在します"
+        log_info "alias csm は既に正しく設定されています"
     fi
 else
     log_warn "$BASHRC_FILE が見つかりません"
@@ -470,10 +616,40 @@ fi
 
 if [ "$ALIAS_ADDED" = true ]; then
     log_success "alias設定を追加しました"
-    log_info "反映するには 'source ~/.bashrc' を実行するか、ターミナルを再起動してください"
+    log_warn "alias を反映するには、以下のいずれかを実行してください："
+    log_info "  1. source ~/.bashrc"
+    log_info "  2. PowerShell で 'wsl --shutdown' してからターミナルを開き直す"
+    log_info "  ※ ウィンドウを閉じるだけでは WSL が終了しないため反映されません"
 fi
 
 RESULTS+=("alias設定: OK")
+
+# ============================================================
+# STEP 11: Memory MCP セットアップ
+# ============================================================
+log_step "STEP 11: Memory MCP セットアップ"
+
+if command -v claude &> /dev/null; then
+    # Memory MCP が既に設定済みか確認
+    if claude mcp list 2>/dev/null | grep -q "memory"; then
+        log_info "Memory MCP は既に設定済みです"
+        RESULTS+=("Memory MCP: OK (設定済み)")
+    else
+        log_info "Memory MCP を設定中..."
+        if claude mcp add memory \
+            -e MEMORY_FILE_PATH="$SCRIPT_DIR/memory/shogun_memory.jsonl" \
+            -- npx -y @modelcontextprotocol/server-memory 2>/dev/null; then
+            log_success "Memory MCP 設定完了"
+            RESULTS+=("Memory MCP: 設定完了")
+        else
+            log_warn "Memory MCP の設定に失敗しました（手動で設定可能）"
+            RESULTS+=("Memory MCP: 設定失敗 (手動設定可能)")
+        fi
+    fi
+else
+    log_warn "claude コマンドが見つからないため Memory MCP 設定をスキップ"
+    RESULTS+=("Memory MCP: スキップ (claude未インストール)")
+fi
 
 # ============================================================
 # 結果サマリー
@@ -518,8 +694,12 @@ echo "  出陣（全エージェント起動）:"
 echo "     ./shutsujin_departure.sh"
 echo ""
 echo "  オプション:"
-echo "     ./shutsujin_departure.sh -s   # セットアップのみ（Claude手動起動）"
-echo "     ./shutsujin_departure.sh -t   # Windows Terminalタブ展開"
+echo "     ./shutsujin_departure.sh -s            # セットアップのみ（Claude手動起動）"
+echo "     ./shutsujin_departure.sh -t            # Windows Terminalタブ展開"
+echo "     ./shutsujin_departure.sh -shell bash   # bash用プロンプトで起動"
+echo "     ./shutsujin_departure.sh -shell zsh    # zsh用プロンプトで起動"
+echo ""
+echo "  ※ シェル設定は config/settings.yaml の shell: でも変更可能です"
 echo ""
 echo "  詳細は README.md を参照してください。"
 echo ""
@@ -527,3 +707,8 @@ echo "  ════════════════════════
 echo "   天下布武！ (Tenka Fubu!)"
 echo "  ════════════════════════════════════════════════════════════════"
 echo ""
+
+# 依存関係不足の場合は exit 1 を返す（install.bat が検知できるように）
+if [ "$HAS_ERROR" = true ]; then
+    exit 1
+fi

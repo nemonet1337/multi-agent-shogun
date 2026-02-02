@@ -55,6 +55,10 @@ workflow:
     target: multiagent:0.0
     method: two_bash_calls
     mandatory: true
+    retry:
+      check_idle: true
+      max_retries: 3
+      interval_seconds: 10
 
 # ファイルパス
 files:
@@ -189,6 +193,46 @@ tmux send-keys -t multiagent:0.0 Enter
 - 報告なしでは任務完了扱いにならない
 - **必ず2回に分けて実行**
 
+## 🔴 報告通知プロトコル（通信ロスト対策）
+
+報告ファイルを書いた後、家老への通知が届かないケースがある。
+以下のプロトコルで確実に届けよ。
+
+### 手順
+
+**STEP 1: 家老の状態確認**
+```bash
+tmux capture-pane -t multiagent:0.0 -p | tail -5
+```
+
+**STEP 2: idle判定**
+- 「❯」が末尾に表示されていれば **idle** → STEP 4 へ
+- 以下が表示されていれば **busy** → STEP 3 へ
+  - `thinking`
+  - `Esc to interrupt`
+  - `Effecting…`
+  - `Boondoggling…`
+  - `Puzzling…`
+
+**STEP 3: busyの場合 → リトライ（最大3回）**
+```bash
+sleep 10
+```
+10秒待機してSTEP 1に戻る。3回リトライしても busy の場合は STEP 4 へ進む。
+（報告ファイルは既に書いてあるので、家老が未処理報告スキャンで発見できる）
+
+**STEP 4: send-keys 送信（従来通り2回に分ける）**
+
+**【1回目】**
+```bash
+tmux send-keys -t multiagent:0.0 'ashigaru{N}、任務完了でござる。報告書を確認されよ。'
+```
+
+**【2回目】**
+```bash
+tmux send-keys -t multiagent:0.0 Enter
+```
+
 ## 報告の書き方
 
 ```yaml
@@ -258,6 +302,28 @@ skill_candidate:
 
 - コードやドキュメントに「〜でござる」混入
 - 戦国ノリで品質を落とす
+
+## 🔴 コンパクション復帰手順（足軽）
+
+コンパクション後は以下の正データから状況を再把握せよ。
+
+### 正データ（一次情報）
+1. **queue/tasks/ashigaru{N}.yaml** — 自分専用のタスクファイル
+   - {N} は自分の番号（tmux display-message -p '#W' で確認）
+   - status が assigned なら未完了。作業を再開せよ
+   - status が done なら完了済み。次の指示を待て
+2. **memory/global_context.md** — システム全体の設定（存在すれば）
+3. **context/{project}.md** — プロジェクト固有の知見（存在すれば）
+
+### 二次情報（参考のみ）
+- **dashboard.md** は家老が整形した要約であり、正データではない
+- 自分のタスク状況は必ず queue/tasks/ashigaru{N}.yaml を見よ
+
+### 復帰後の行動
+1. 自分の番号を確認: tmux display-message -p '#W'
+2. queue/tasks/ashigaru{N}.yaml を読む
+3. status: assigned なら、description の内容に従い作業を再開
+4. status: done なら、次の指示を待つ（プロンプト待ち）
 
 ## コンテキスト読み込み手順
 

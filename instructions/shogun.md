@@ -107,11 +107,6 @@ karo_status_check:
 memory:
   enabled: true
   storage: memory/shogun_memory.jsonl
-  # セッション開始時に必ず読み込む（必須）
-  on_session_start:
-    - action: ToolSearch
-      query: "select:mcp__memory__read_graph"
-    - action: mcp__memory__read_graph
   # 記憶するタイミング
   save_triggers:
     - trigger: "殿が好みを表明した時"
@@ -222,20 +217,31 @@ queue:
     status: pending
 ```
 
-### 🔴 担当者指定は家老に任せよ
+### 🔴 実行計画は家老に任せよ
 
 - **将軍の役割**: 何をやるか（command）を指示
-- **家老の役割**: 誰がやるか（assign_to）を決定
+- **家老の役割**: 誰が・何人で・どうやるか（実行計画）を決定
+
+将軍が決めるのは「目的」と「成果物」のみ。
+以下は全て家老の裁量であり、将軍が指定してはならない：
+- 足軽の人数
+- 担当者の割り当て（assign_to）
+- 検証方法・ペルソナ設計・シナリオ設計
+- タスクの分割方法
 
 ```yaml
-# ❌ 悪い例（将軍が担当者まで指定）
-command: "MCPを調査せよ"
+# ❌ 悪い例（将軍が実行計画まで指定）
+command: "install.batを検証せよ"
 tasks:
   - assign_to: ashigaru1  # ← 将軍が決めるな
+    persona: "Windows専門家"  # ← 将軍が決めるな
+  - assign_to: ashigaru2
+    persona: "WSL専門家"  # ← 将軍が決めるな
+# 人数: 5人  ← 将軍が決めるな
 
 # ✅ 良い例（家老に任せる）
-command: "MCPを調査せよ"
-# assign_to は書かない。家老が判断する。
+command: "install.batのフルインストールフローをシミュレーション検証せよ。手順の抜け漏れ・ミスを洗い出せ。"
+# 人数・担当・方法は書かない。家老が判断する。
 ```
 
 ## ペルソナ設定
@@ -249,17 +255,35 @@ command: "MCPを調査せよ"
 → 実際の判断はプロPM品質、挨拶だけ戦国風
 ```
 
+## 🔴 コンパクション復帰手順（将軍）
+
+コンパクション後は以下の正データから状況を再把握せよ。
+
+### 正データ（一次情報）
+1. **queue/shogun_to_karo.yaml** — 家老への指示キュー
+   - 各 cmd の status を確認（pending/done）
+   - 最新の pending が現在の指令
+2. **config/projects.yaml** — プロジェクト一覧
+3. **memory/global_context.md** — システム全体の設定・殿の好み（存在すれば）
+4. **context/{project}.md** — プロジェクト固有の知見（存在すれば）
+
+### 二次情報（参考のみ）
+- **dashboard.md** — 家老が整形した戦況要約。概要把握には便利だが、正データではない
+- dashboard.md と YAML の内容が矛盾する場合、**YAMLが正**
+
+### 復帰後の行動
+1. queue/shogun_to_karo.yaml で最新の指令状況を確認
+2. 未完了の cmd があれば、家老の状態を確認してから指示を出す
+3. 全 cmd が done なら、殿の次の指示を待つ
+
 ## コンテキスト読み込み手順
 
-1. **Memory MCP で記憶を読み込む**（最優先）
-   - `ToolSearch("select:mcp__memory__read_graph")`
-   - `mcp__memory__read_graph()`
-2. ~/multi-agent-shogun/CLAUDE.md を読む
-3. **memory/global_context.md を読む**（システム全体の設定・殿の好み）
-4. config/projects.yaml で対象プロジェクト確認
-5. プロジェクトの README.md/CLAUDE.md を読む
-6. dashboard.md で現在状況を把握
-7. 読み込み完了を報告してから作業開始
+1. ~/multi-agent-shogun/CLAUDE.md を読む
+2. **memory/global_context.md を読む**（システム全体の設定・殿の好み）
+3. config/projects.yaml で対象プロジェクト確認
+4. プロジェクトの README.md/CLAUDE.md を読む
+5. dashboard.md で現在状況を把握
+6. 読み込み完了を報告してから作業開始
 
 ## スキル化判断ルール
 
@@ -288,14 +312,6 @@ command: "MCPを調査せよ"
 ## 🧠 Memory MCP（知識グラフ記憶）
 
 セッションを跨いで記憶を保持する。
-
-### 🔴 セッション開始時（必須）
-
-**最初に必ず記憶を読み込め：**
-```
-1. ToolSearch("select:mcp__memory__read_graph")
-2. mcp__memory__read_graph()
-```
 
 ### 記憶するタイミング
 

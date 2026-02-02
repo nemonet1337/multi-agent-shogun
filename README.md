@@ -75,9 +75,9 @@
 </td>
 <td>
 
-🖱️ **Double-click `install.bat`**
+🖱️ **Run `install.bat`**
 
-That's it! The installer handles everything automatically.
+Right-click and select **"Run as administrator"** (required if WSL2 is not yet installed). The installer will guide you through each step — you may need to restart your PC or set up Ubuntu before re-running.
 
 </td>
 </tr>
@@ -89,7 +89,28 @@ That's it! The installer handles everything automatically.
 </td>
 <td>
 
-✅ **Done!** 10 AI agents are now running.
+🐧 **Open Ubuntu and run** (first time only)
+
+```bash
+cd /mnt/c/tools/multi-agent-shogun
+./first_setup.sh
+```
+
+</td>
+</tr>
+<tr>
+<td>
+
+**Step 4**
+
+</td>
+<td>
+
+✅ **Deploy!**
+
+```bash
+./shutsujin_departure.sh
+```
 
 </td>
 </tr>
@@ -103,15 +124,6 @@ Open **Ubuntu terminal** (WSL) and run:
 cd /mnt/c/tools/multi-agent-shogun
 ./shutsujin_departure.sh
 ```
-
-#### 🔐 First-Time Authentication (One Time Only)
-
-1. After running `./shutsujin_departure.sh`, a login screen appears in each pane
-2. **In just ONE pane**, copy the URL and open it in your browser to log in
-3. After authentication, press `Ctrl+C` in other panes and re-run `claude --dangerously-skip-permissions`
-4. Credentials are saved to `~/.claude/` and won't be needed again
-
-> **Note:** You don't need to log in separately on every pane.
 
 ---
 
@@ -153,9 +165,9 @@ cd ~/multi-agent-shogun
 ### Don't have WSL2 yet?
 
 No problem! When you run `install.bat`, it will:
-1. Check if WSL2 is installed
-2. If not, show you exactly how to install it
-3. Guide you through the entire process
+1. Check if WSL2 is installed (auto-install if missing)
+2. Check if Ubuntu is installed (auto-install if missing)
+3. Guide you to the next steps (`first_setup.sh`)
 
 **Quick install command** (run in PowerShell as Administrator):
 ```powershell
@@ -173,19 +185,18 @@ Then restart your computer and run `install.bat` again.
 
 | Script | Purpose | When to Run |
 |--------|---------|-------------|
-| `install.bat` | Windows: First-time setup (runs first_setup.sh via WSL) | First time only |
-| `first_setup.sh` | Installs tmux, Node.js, Claude Code CLI | First time only |
+| `install.bat` | Windows: WSL2 + Ubuntu setup | First time only |
+| `first_setup.sh` | Installs tmux, Node.js, Claude Code CLI + configures Memory MCP | First time only |
 | `shutsujin_departure.sh` | Creates tmux sessions + starts Claude Code + loads instructions | Every day |
 
 ### What `install.bat` does automatically:
-- ✅ Checks if WSL2 is installed
-- ✅ Opens Ubuntu and runs `first_setup.sh`
-- ✅ Installs tmux, Node.js, and Claude Code CLI
-- ✅ Creates necessary directories
+- ✅ Checks if WSL2 is installed (auto-install if missing)
+- ✅ Checks if Ubuntu is installed (auto-install if missing)
+- ✅ Guides you to the next steps (`first_setup.sh`)
 
 ### What `shutsujin_departure.sh` does:
 - ✅ Creates tmux sessions (shogun + multiagent)
-- ✅ Launches Claude Code on all 10 agents
+- ✅ Launches Claude Code on all agents
 - ✅ Automatically loads instruction files for each agent
 - ✅ Resets queue files for a fresh start
 
@@ -214,7 +225,7 @@ If you prefer to install dependencies manually:
 
 ### ✅ What Happens After Setup
 
-After running either option, **10 AI agents** will start automatically:
+After running either option, **AI agents** will start automatically:
 
 | Agent | Role | Quantity |
 |-------|------|----------|
@@ -386,6 +397,8 @@ Skills are not included in this repository by default.
 As you use the system, skill candidates will appear in `dashboard.md`.
 Review and approve them to grow your personal skill library.
 
+Skills can be invoked with `/skill-name`. Just tell the Shogun: "run `/skill-name`".
+
 ---
 
 ## 🏛️ Design Philosophy
@@ -396,19 +409,24 @@ The Shogun → Karo → Ashigaru hierarchy exists for:
 
 1. **Immediate Response**: Shogun delegates instantly and returns control to you
 2. **Parallel Execution**: Karo distributes to multiple Ashigaru simultaneously
-3. **Separation of Concerns**: Shogun decides "what", Karo decides "who"
+3. **Separation of Concerns**: Each role is clearly defined — Shogun decides "what", Karo decides "who"
+4. **Scalability**: Adding more Ashigaru doesn't break the structure
+5. **Fault Isolation**: One Ashigaru failing doesn't affect others
+6. **Centralized Reporting**: Only Shogun communicates with you, keeping information organized
 
 ### Why YAML + send-keys?
 
-- **YAML files**: Structured communication that survives agent restarts
+- **YAML files**: Structured communication that survives agent restarts and is human-readable for debugging
 - **send-keys**: Event-driven wakeups (no polling = no wasted API calls)
 - **No direct calls**: Agents can't interrupt each other or your input
+- **Conflict avoidance**: Each Ashigaru has dedicated files, preventing race conditions
 
 ### Why Only Karo Updates Dashboard?
 
 - **Single responsibility**: One writer = no conflicts
 - **Information hub**: Karo receives all reports, knows the full picture
 - **Consistency**: All updates go through one quality gate
+- **No interruptions**: Prevents disrupting your input when Shogun would otherwise update the dashboard
 
 ### How Skills Work
 
@@ -420,12 +438,18 @@ Skills (`.claude/commands/`) are **not committed to this repository** by design.
 - No one-size-fits-all solution
 
 **How to create new skills:**
-1. Ashigaru report "skill candidates" when they notice repeatable patterns
-2. Candidates appear in `dashboard.md` under "Skill Candidates"
-3. You review and approve (or reject)
-4. Approved skills are created by Karo
 
-This keeps skills **user-driven** — only what you find useful gets added.
+```
+Ashigaru notices a repeatable pattern during work
+    ↓
+Candidate appears in dashboard.md under "Skill Candidates"
+    ↓
+You (the Lord) review the candidate
+    ↓
+If approved, Karo creates the skill
+```
+
+Skills are **user-driven** — they only grow when you decide they're useful. Automatic growth would make them unmanageable, so only what you explicitly approve gets added.
 
 ---
 
@@ -459,6 +483,8 @@ claude mcp add github -e GITHUB_PERSONAL_ACCESS_TOKEN=your_pat_here -- npx -y @m
 claude mcp add sequential-thinking -- npx -y @modelcontextprotocol/server-sequential-thinking
 
 # 5. Memory - Long-term memory across sessions (Recommended!)
+# ✅ Automatically configured by first_setup.sh
+# To reconfigure manually:
 claude mcp add memory -e MEMORY_FILE_PATH="$PWD/memory/shogun_memory.jsonl" -- npx -y @modelcontextprotocol/server-memory
 ```
 
@@ -531,11 +557,15 @@ language: en   # Japanese + English translation
 │                                                                     │
 │  install.bat (Windows)                                              │
 │      │                                                              │
-│      └──▶ first_setup.sh (via WSL)                                  │
-│                │                                                    │
-│                ├── Check/Install tmux                               │
-│                ├── Check/Install Node.js v20+ (via nvm)             │
-│                └── Check/Install Claude Code CLI                    │
+│      ├── Check/Install WSL2                                         │
+│      └── Check/Install Ubuntu                                       │
+│                                                                     │
+│  first_setup.sh (run manually in Ubuntu/WSL)                        │
+│      │                                                              │
+│      ├── Check/Install tmux                                         │
+│      ├── Check/Install Node.js v20+ (via nvm)                      │
+│      ├── Check/Install Claude Code CLI                              │
+│      └── Configure Memory MCP server                                │
 │                                                                     │
 ├─────────────────────────────────────────────────────────────────────┤
 │                      DAILY STARTUP (Run Every Day)                  │
@@ -608,6 +638,20 @@ tmux kill-session -t multiagent
 
 </details>
 
+<details>
+<summary><b>Convenient Aliases</b> (Click to expand)</summary>
+
+Running `first_setup.sh` automatically adds these aliases to `~/.bashrc`:
+
+```bash
+alias css='cd /mnt/c/tools/multi-agent-shogun && ./shutsujin_departure.sh'  # Setup + deploy
+alias csm='cd /mnt/c/tools/multi-agent-shogun'                              # Navigate to directory only
+```
+
+*To apply aliases, run `source ~/.bashrc` or restart your terminal. On WSL, run `wsl --shutdown` in PowerShell first — simply closing the window does not terminate WSL.*
+
+</details>
+
 ---
 
 ## 📁 File Structure
@@ -632,6 +676,9 @@ multi-agent-shogun/
 ├── config/
 │   └── settings.yaml         # Language and other settings
 │
+├── projects/                # Project details (git-ignored, contains client data)
+│   └── <project_id>.yaml   # Full project info (client, tasks, Notion links, etc.)
+│
 ├── queue/                    # Communication files
 │   ├── shogun_to_karo.yaml   # Commands from Shogun to Karo
 │   ├── tasks/                # Individual worker task files
@@ -643,6 +690,49 @@ multi-agent-shogun/
 ```
 
 </details>
+
+---
+
+## 📂 Project Management
+
+This system manages **all white-collar tasks**, not just its own development. Projects can live anywhere on your filesystem — they don't need to be inside this repository.
+
+### How It Works
+
+```
+config/projects.yaml          # Project registry (ID, name, path, status)
+projects/<project_id>.yaml    # Full project details (client info, tasks, Notion links, etc.)
+```
+
+- **`config/projects.yaml`**: Lists all projects with basic metadata (ID, name, path, status)
+- **`projects/<id>.yaml`**: Contains full details for each project (client info, contract, tasks, related files, Notion pages, etc.)
+- **Project files** (source code, docs, etc.) live at the `path` specified in the project entry — anywhere on the filesystem
+- **`projects/` is git-ignored** because it may contain confidential client information
+
+### Example
+
+```yaml
+# config/projects.yaml
+projects:
+  - id: my_client
+    name: "Client X Consulting"
+    path: "/mnt/c/Consulting/client_x"
+    status: active
+
+# projects/my_client.yaml
+id: my_client
+client:
+  name: "Client X"
+  company: "X Corp"
+contract:
+  fee: "monthly"
+current_tasks:
+  - id: task_001
+    name: "System architecture review"
+    status: in_progress
+```
+
+This separation allows the Shogun system to orchestrate tasks across multiple external projects while keeping project details private and out of version control.
 
 ---
 
@@ -698,6 +788,18 @@ tmux attach-session -t multiagent
 | `Ctrl+B` then `d` | Detach (leave running) |
 | `tmux kill-session -t shogun` | Stop Shogun session |
 | `tmux kill-session -t multiagent` | Stop worker sessions |
+
+### 🖱️ Mouse Support
+
+`first_setup.sh` automatically configures tmux mouse support (`set -g mouse on` in `~/.tmux.conf`). This enables the following mouse operations:
+
+| Action | Description |
+|--------|-------------|
+| Scroll wheel | Scroll within a pane |
+| Click on a pane | Switch focus between panes |
+| Drag pane border | Resize panes |
+
+> **Note:** If you set up tmux manually (without `first_setup.sh`), add `set -g mouse on` to your `~/.tmux.conf` to enable mouse support.
 
 ---
 
