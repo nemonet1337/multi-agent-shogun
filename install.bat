@@ -136,6 +136,7 @@ echo   ^|                                                            ^|
 echo   ^|  Options / オプション:                                     ^|
 echo   ^|    -c : Claude Code を使用                                ^|
 echo   ^|    -x : Codex CLI を使用                                  ^|
+echo   ^|    -g : Gemini CLI を使用                                 ^|
 echo   ^|                                                            ^|
 echo   +------------------------------------------------------------+
 echo.

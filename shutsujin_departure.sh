@@ -94,6 +94,10 @@ while [[ $# -gt 0 ]]; do
             AGENT_TYPE="codex"
             shift
             ;;
+        -g|--gemini)
+            AGENT_TYPE="gemini"
+            shift
+            ;;
         -shell|--shell)
             if [[ -n "$2" && "$2" != -* ]]; then
                 SHELL_OVERRIDE="$2"
@@ -112,6 +116,7 @@ while [[ $# -gt 0 ]]; do
             echo "オプション:"
             echo "  -c, --claude        Claude Code を使用"
             echo "  -x, --codex         Codex CLI を使用"
+            echo "  -g, --gemini        Gemini CLI を使用"
             echo "  -s, --setup-only    tmuxセッションのセットアップのみ（エージェント起動なし）"
             echo "  -t, --terminal      Windows Terminal で新しいタブを開く"
             echo "  -shell, --shell SH  シェルを指定（bash または zsh）"
@@ -121,6 +126,7 @@ while [[ $# -gt 0 ]]; do
             echo "  ./shutsujin_departure.sh              # 対話式メニューでエージェント選択"
             echo "  ./shutsujin_departure.sh -c           # Claude Code で全エージェント起動"
             echo "  ./shutsujin_departure.sh -x           # Codex CLI で全エージェント起動"
+            echo "  ./shutsujin_departure.sh -g           # Gemini CLI で全エージェント起動"
             echo "  ./shutsujin_departure.sh -s           # セットアップのみ（手動でエージェント起動）"
             echo "  ./shutsujin_departure.sh -shell zsh   # zsh用プロンプトで起動"
             echo ""
@@ -162,14 +168,18 @@ if [ -z "$AGENT_TYPE" ] && [ "$SETUP_ONLY" = false ]; then
     echo ""
     echo "    [1] Claude Code  (Anthropic)"
     echo "    [2] Codex CLI    (OpenAI)"
+    echo "    [3] Gemini CLI   (Google)"
     echo ""
-    read -p "  選択 [1/2]: " AGENT_CHOICE
+    read -p "  選択 [1/2/3]: " AGENT_CHOICE
     case $AGENT_CHOICE in
         1)
             AGENT_TYPE="claude"
             ;;
         2)
             AGENT_TYPE="codex"
+            ;;
+        3)
+            AGENT_TYPE="gemini"
             ;;
         *)
             echo "  無効な選択です。Claude Code をデフォルトで使用します。"
@@ -187,6 +197,11 @@ if [ "$AGENT_TYPE" = "codex" ]; then
     AGENT_CMD="codex --approval-mode full-auto --sandbox workspace-write"
     AGENT_DISPLAY_NAME="Codex CLI"
     STARTUP_CHECK_PATTERN="codex"
+elif [ "$AGENT_TYPE" = "gemini" ]; then
+    SHOGUN_CMD="gemini --yolo"
+    AGENT_CMD="gemini --yolo"
+    AGENT_DISPLAY_NAME="Gemini CLI"
+    STARTUP_CHECK_PATTERN="gemini"
 else
     SHOGUN_CMD="MAX_THINKING_TOKENS=0 claude --model opus --dangerously-skip-permissions"
     AGENT_CMD="claude --dangerously-skip-permissions"

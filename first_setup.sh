@@ -377,6 +377,57 @@ if ! command -v claude &> /dev/null && ! command -v codex &> /dev/null; then
 fi
 
 # ============================================================
+# STEP 5C: Gemini CLI チェック
+# ============================================================
+log_step "STEP 5C: Gemini CLI チェック"
+
+if command -v gemini &> /dev/null; then
+    # バージョン取得を試みる
+    GEMINI_VERSION=$(gemini --version 2>/dev/null || echo "unknown")
+    log_success "Gemini CLI がインストール済みです"
+    log_info "バージョン: $GEMINI_VERSION"
+    RESULTS+=("Gemini CLI: OK")
+else
+    log_warn "Gemini CLI がインストールされていません"
+    echo ""
+
+    if command -v npm &> /dev/null; then
+        echo "  インストールコマンド:"
+        echo "     npm install -g @google/gemini-cli"
+        echo ""
+        if [ ! -t 0 ]; then
+            REPLY="Y"
+        else
+            read -p "  今すぐインストールしますか? [Y/n]: " REPLY
+        fi
+        REPLY=${REPLY:-Y}
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            log_info "Gemini CLI をインストール中..."
+            npm install -g @google/gemini-cli
+
+            if command -v gemini &> /dev/null; then
+                log_success "Gemini CLI インストール完了"
+                RESULTS+=("Gemini CLI: インストール完了")
+            else
+                log_error "インストールに失敗しました。パスを確認してください"
+                RESULTS+=("Gemini CLI: インストール失敗")
+            fi
+        else
+            log_warn "インストールをスキップしました"
+            RESULTS+=("Gemini CLI: 未インストール (スキップ)")
+        fi
+    else
+        echo "  npm がインストールされていないため、先に Node.js をインストールしてください"
+        RESULTS+=("Gemini CLI: 未インストール (npm必要)")
+    fi
+fi
+
+# CLIがすべてインストールされていない場合のみエラー
+if ! command -v claude &> /dev/null && ! command -v codex &> /dev/null && ! command -v gemini &> /dev/null; then
+    HAS_ERROR=true
+fi
+
+# ============================================================
 # STEP 6: ディレクトリ構造作成
 # ============================================================
 log_step "STEP 6: ディレクトリ構造作成"
