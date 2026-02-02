@@ -326,6 +326,57 @@ else
 fi
 
 # ============================================================
+# STEP 5B: Codex CLI チェック
+# ============================================================
+log_step "STEP 5B: Codex CLI チェック"
+
+if command -v codex &> /dev/null; then
+    # バージョン取得を試みる
+    CODEX_VERSION=$(codex --version 2>/dev/null || echo "unknown")
+    log_success "Codex CLI がインストール済みです"
+    log_info "バージョン: $CODEX_VERSION"
+    RESULTS+=("Codex CLI: OK")
+else
+    log_warn "Codex CLI がインストールされていません"
+    echo ""
+
+    if command -v npm &> /dev/null; then
+        echo "  インストールコマンド:"
+        echo "     npm install -g @openai/codex"
+        echo ""
+        if [ ! -t 0 ]; then
+            REPLY="Y"
+        else
+            read -p "  今すぐインストールしますか? [Y/n]: " REPLY
+        fi
+        REPLY=${REPLY:-Y}
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            log_info "Codex CLI をインストール中..."
+            npm install -g @openai/codex
+
+            if command -v codex &> /dev/null; then
+                log_success "Codex CLI インストール完了"
+                RESULTS+=("Codex CLI: インストール完了")
+            else
+                log_error "インストールに失敗しました。パスを確認してください"
+                RESULTS+=("Codex CLI: インストール失敗")
+            fi
+        else
+            log_warn "インストールをスキップしました"
+            RESULTS+=("Codex CLI: 未インストール (スキップ)")
+        fi
+    else
+        echo "  npm がインストールされていないため、先に Node.js をインストールしてください"
+        RESULTS+=("Codex CLI: 未インストール (npm必要)")
+    fi
+fi
+
+# CLIが両方インストールされていない場合のみエラー
+if ! command -v claude &> /dev/null && ! command -v codex &> /dev/null; then
+    HAS_ERROR=true
+fi
+
+# ============================================================
 # STEP 6: ディレクトリ構造作成
 # ============================================================
 log_step "STEP 6: ディレクトリ構造作成"

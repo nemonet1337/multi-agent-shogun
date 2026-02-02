@@ -133,6 +133,10 @@ echo   ^|  Every time you use / 使うたびに:                          ^|
 echo   ^|    cd /mnt/c/tools/feature-shogun                          ^|
 echo   ^|    ./shutsujin_departure.sh                                ^|
 echo   ^|                                                            ^|
+echo   ^|  Options / オプション:                                     ^|
+echo   ^|    -c : Claude Code を使用                                ^|
+echo   ^|    -x : Codex CLI を使用                                  ^|
+echo   ^|                                                            ^|
 echo   +------------------------------------------------------------+
 echo.
 pause

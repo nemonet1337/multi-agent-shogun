@@ -74,6 +74,7 @@ generate_prompt() {
 SETUP_ONLY=false
 OPEN_TERMINAL=false
 SHELL_OVERRIDE=""
+AGENT_TYPE=""  # claude または codex
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -83,6 +84,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         -t|--terminal)
             OPEN_TERMINAL=true
+            shift
+            ;;
+        -c|--claude)
+            AGENT_TYPE="claude"
+            shift
+            ;;
+        -x|--codex)
+            AGENT_TYPE="codex"
             shift
             ;;
         -shell|--shell)
@@ -96,22 +105,23 @@ while [[ $# -gt 0 ]]; do
             ;;
         -h|--help)
             echo ""
-            echo "🏯 multi-agent-shogun 出陣スクリプト"
+            echo "🏰 multi-agent-shogun 出陣スクリプト"
             echo ""
             echo "使用方法: ./shutsujin_departure.sh [オプション]"
             echo ""
             echo "オプション:"
-            echo "  -s, --setup-only    tmuxセッションのセットアップのみ（Claude起動なし）"
+            echo "  -c, --claude        Claude Code を使用"
+            echo "  -x, --codex         Codex CLI を使用"
+            echo "  -s, --setup-only    tmuxセッションのセットアップのみ（エージェント起動なし）"
             echo "  -t, --terminal      Windows Terminal で新しいタブを開く"
             echo "  -shell, --shell SH  シェルを指定（bash または zsh）"
-            echo "                      未指定時は config/settings.yaml の設定を使用"
             echo "  -h, --help          このヘルプを表示"
             echo ""
             echo "例:"
-            echo "  ./shutsujin_departure.sh              # 全エージェント起動（通常の出陣）"
-            echo "  ./shutsujin_departure.sh -s           # セットアップのみ（手動でClaude起動）"
-            echo "  ./shutsujin_departure.sh -t           # 全エージェント起動 + ターミナルタブ展開"
-            echo "  ./shutsujin_departure.sh -shell bash  # bash用プロンプトで起動"
+            echo "  ./shutsujin_departure.sh              # 対話式メニューでエージェント選択"
+            echo "  ./shutsujin_departure.sh -c           # Claude Code で全エージェント起動"
+            echo "  ./shutsujin_departure.sh -x           # Codex CLI で全エージェント起動"
+            echo "  ./shutsujin_departure.sh -s           # セットアップのみ（手動でエージェント起動）"
             echo "  ./shutsujin_departure.sh -shell zsh   # zsh用プロンプトで起動"
             echo ""
             echo "エイリアス:"
@@ -137,6 +147,51 @@ if [ -n "$SHELL_OVERRIDE" ]; then
         echo "エラー: -shell オプションには bash または zsh を指定してください（指定値: $SHELL_OVERRIDE）"
         exit 1
     fi
+fi
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# エージェント選択（オプション未指定時は対話式メニュー）
+# ═══════════════════════════════════════════════════════════════════════════════
+if [ -z "$AGENT_TYPE" ] && [ "$SETUP_ONLY" = false ]; then
+    echo ""
+    echo "  ╔══════════════════════════════════════════════════════════╗"
+    echo "  ║  🏯 エージェント選択                                      ║"
+    echo "  ╚══════════════════════════════════════════════════════════╝"
+    echo ""
+    echo "  使用するAIエージェントを選択してください:"
+    echo ""
+    echo "    [1] Claude Code  (Anthropic)"
+    echo "    [2] Codex CLI    (OpenAI)"
+    echo ""
+    read -p "  選択 [1/2]: " AGENT_CHOICE
+    case $AGENT_CHOICE in
+        1)
+            AGENT_TYPE="claude"
+            ;;
+        2)
+            AGENT_TYPE="codex"
+            ;;
+        *)
+            echo "  無効な選択です。Claude Code をデフォルトで使用します。"
+            AGENT_TYPE="claude"
+            ;;
+    esac
+    echo ""
+    log_success "  └─ ${AGENT_TYPE} を選択しました"
+    echo ""
+fi
+
+# エージェント別コマンド設定
+if [ "$AGENT_TYPE" = "codex" ]; then
+    SHOGUN_CMD="codex --approval-mode full-auto --sandbox workspace-write"
+    AGENT_CMD="codex --approval-mode full-auto --sandbox workspace-write"
+    AGENT_DISPLAY_NAME="Codex CLI"
+    STARTUP_CHECK_PATTERN="codex"
+else
+    SHOGUN_CMD="MAX_THINKING_TOKENS=0 claude --model opus --dangerously-skip-permissions"
+    AGENT_CMD="claude --dangerously-skip-permissions"
+    AGENT_DISPLAY_NAME="Claude Code"
+    STARTUP_CHECK_PATTERN="bypass permissions"
 fi
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -479,21 +534,30 @@ log_success "  └─ 家老・足軽の陣、構築完了"
 echo ""
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# STEP 6: Claude Code 起動（-s / --setup-only のときはスキップ）
+# STEP 6: エージェント起動（-s / --setup-only のときはスキップ）
 # ═══════════════════════════════════════════════════════════════════════════════
 if [ "$SETUP_ONLY" = false ]; then
-    # Claude Code CLI の存在チェック
-    if ! command -v claude &> /dev/null; then
-        log_info "⚠️  claude コマンドが見つかりません"
-        echo "  first_setup.sh を再実行してください:"
-        echo "    ./first_setup.sh"
-        exit 1
+    # エージェント CLI の存在チェック
+    if [ "$AGENT_TYPE" = "codex" ]; then
+        if ! command -v codex &> /dev/null; then
+            log_info "⚠️  codex コマンドが見つかりません"
+            echo "  first_setup.sh を再実行してください:"
+            echo "    ./first_setup.sh"
+            exit 1
+        fi
+    else
+        if ! command -v claude &> /dev/null; then
+            log_info "⚠️  claude コマンドが見つかりません"
+            echo "  first_setup.sh を再実行してください:"
+            echo "    ./first_setup.sh"
+            exit 1
+        fi
     fi
 
-    log_war "👑 全軍に Claude Code を召喚中..."
+    log_war "👑 全軍に ${AGENT_DISPLAY_NAME} を召喚中..."
 
     # 将軍
-    tmux send-keys -t shogun:main "MAX_THINKING_TOKENS=0 claude --model opus --dangerously-skip-permissions"
+    tmux send-keys -t shogun:main "$SHOGUN_CMD"
     tmux send-keys -t shogun:main Enter
     log_info "  └─ 将軍、召喚完了"
 
@@ -503,12 +567,12 @@ if [ "$SETUP_ONLY" = false ]; then
     # 家老 + 足軽（9ペイン）
     for i in {0..8}; do
         p=$((PANE_BASE + i))
-        tmux send-keys -t "multiagent:agents.${p}" "claude --dangerously-skip-permissions"
+        tmux send-keys -t "multiagent:agents.${p}" "$AGENT_CMD"
         tmux send-keys -t "multiagent:agents.${p}" Enter
     done
     log_info "  └─ 家老・足軽、召喚完了"
 
-    log_success "✅ 全軍 Claude Code 起動完了"
+    log_success "✅ 全軍 ${AGENT_DISPLAY_NAME} 起動完了"
     echo ""
 
     # ═══════════════════════════════════════════════════════════════════════════
